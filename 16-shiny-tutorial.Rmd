@@ -1,0 +1,335 @@
+---
+title: "Shiny Examples"
+author: "Bastola"
+date: "`r format(Sys.Date(), ' %B %d %Y')`"
+output: html_document
+runtime: shiny
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      #dev = 'svg',
+                      collapse = TRUE, 
+                      comment = NA,  # PRINTS IN FRONT OF OUTPUT, default is '##' which comments out output
+                      prompt = FALSE, # IF TRUE adds a > before each code input
+                      warning = FALSE, 
+                      message = FALSE,
+                      fig.height = 3, 
+                      fig.width = 4,
+                      out.width = "100%"
+                      )
+
+library(tidyverse)
+library(shiny)
+library(readr)
+library(janitor)
+library(purrr)
+library(lubridate)
+library(plotly)
+library(DT)
+library(ggthemes)
+```
+
+
+## Overview
+
+- Shiny is an R package that provides a fairly high-level framework for creating interactive graphics
+- Shiny web app allows us to build interactive dashboard that we will let Rstudio host for us with their servers
+- Rstudio makes it easy to create and even upload these graphs to the web
+- You can publish Shiny documents to the ShinyApps (https://shinyapps.io) hosted service
+
+### Interactive plots
+
+- Shiny uses reactive programming to automatically update outputs when inputs change
+- Shiny applications have two components:
+  + a user interface (UI) object 
+  + a server function
+- These are passed as arguments to the `shinyApp` function that creates a Shiny app object from this UI/server pair
+
+The YAML header of this R Markdown document has the line `runtime: shiny` so that RStudio understands this is a Shiny document.
+
+### Useful Resources
+
+- [RStudio Documentation](https://shiny.rstudio.com/articles/basics.html)
+
+- [Shiny Documents for further reading](https://bookdown.org/yihui/rmarkdown/shiny-documents.html)
+
+- [Learn Shiny with videos and written tutorials](https://shiny.rstudio.com/tutorial/).
+
+- [Shiny Gallery with example demonstrations](https://shiny.rstudio.com/gallery/)
+
+- [Mastering Shiny by Hadley Wickham](https://mastering-shiny.org/index.html).
+
+- [Shiny Cheatsheet](https://deepbas.io/cheatsheets/shiny.pdf)
+
+### One nice example
+
+- [COVID-19 Tracker](https://shiny.rstudio.com/gallery/covid19-tracker.html)
+
+## Shiny App Structure
+
+## User Interface (UI)
+
+UI is just a web document that the user gets to see, it’s HTML that you write using Shiny’s functions. The UI is responsible for creating the layout of the app and telling Shiny exactly where things go. The server is responsible for the logic of the app; it’s the set of instructions that tell the web page what to show when the user interacts with the page.
+
+### Hello World!
+
+```{r}
+ui <- fluidPage("Hello World!")
+server <- function(input, output) {}
+shinyApp(ui = ui, server = server, options = list(height = 200))
+```
+
+### Add more information
+
+```{r}
+fluidPage(
+  titlePanel("Tracking Covid in Minnesota"),
+  h1("Some nice header"),
+  "elements1",
+  "elements2",
+  br(),
+  "things1",
+  strong("things2")
+)
+```
+
+<br>
+
+### Add a layout
+
+```{r}
+sidebarLayout(
+  sidebarPanel("our inputs will go here"),
+  mainPanel("the results will go here")
+)
+```
+
+## Read Data
+
+```{r}
+covid_data <- read_csv("/home/deepak/Desktop/Research/stat220/MyStat220/ShinyApps/covid_confirmed_usafacts.csv")
+head(covid_data)
+```
+
+
+### Some Data Wrangling
+
+```{r}
+MNdata <- covid_data %>% filter(State == "MN") %>% 
+  select(-countyFIPS, - StateFIPS, -State) %>% 
+  filter(!row_number() %in% c(1)) %>% 
+  pivot_longer(values_to = "Cases", names_to = "Dates", -1) %>% 
+  janitor::clean_names() %>% 
+  mutate(county_name = str_remove(county_name, " County")) %>% 
+  rename(Counties = county_name) %>%
+  mutate(dates = ymd(dates), Counties = as.factor(Counties))  %>%
+  mutate(month = month(dates), year = year(dates))
+```
+
+
+```{r}
+glimpse(MNdata)
+```
+
+
+```{r}
+# County level data
+county_names <- MNdata %>% pull(Counties) %>% unique()
+county_data <- lapply(1:length(county_names), function(i) filter(MNdata, Counties == county_names[i]))
+county_data %>% pluck(which(county_names == "Dakota"))
+```
+
+### A complete skeleton app
+
+```{r}
+
+ui <- fluidPage(
+  titlePanel("Tracking Covid in Minnesota"),
+  sidebarLayout(
+    sidebarPanel("our inputs will go here"),
+    mainPanel("the results will go here")
+  )
+)
+
+server <- function(input, output) {}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+### Add inputs to the UI
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Tracking Covid in Minnesota"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("monthInput", "Month", 0, 12, c(3, 6)),
+      radioButtons("yearInput", "Year",
+                  choices = c("2020", "2021", "2022"),
+                  selected = "2022"),
+       selectInput(inputId = "dv", label = "County",
+                        choices = levels(MNdata$Counties),
+                        selected = c("Aitkin"))
+    ),
+    mainPanel("the results will go here")
+  )
+)
+
+server <- function(input, output) {}
+
+shinyApp(ui = ui, server = server, options = list(height = 800))
+```
+
+
+### Add placeholders for outputs
+
+
+```{r}
+ui <- fluidPage(
+  titlePanel("Tracking Covid in Minnesota"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("monthInput", "Month", 0, 12, c(3, 6)),
+      radioButtons("yearInput", "Year",
+                  choices = c("2020", "2021", "2022"),
+                  selected = "2022"),
+       selectInput(inputId = "dv", label = "County",
+                        choices = levels(MNdata$Counties),
+                        selected = c("Aitkin"))
+    ),
+    mainPanel(
+      plotOutput("coolplot"),
+      br(), br(),
+      tableOutput("results")
+    )
+  )
+)
+
+server <- function(input, output) {}
+
+shinyApp(ui = ui, server = server, options = list(height = 800))
+```
+
+
+## Server Function
+
+`Server` function will be responsible for listening to changes to the inputs and creating outputs to show in the app.
+
+### Implementation 1
+
+```{r}
+
+ui1 <- fluidPage(
+    titlePanel("Tracking Covid in Minnesota"),
+    sidebarLayout(
+        sidebarPanel(
+          sliderInput("monthInput", "Month", 0, 12, c(3, 6)),
+          radioButtons("yearInput", "Year",
+                  choices = c("2020", "2021", "2022"),
+                  selected = "2020"),
+          selectInput(inputId = "dv", label = "County",
+                        choices = levels(MNdata$Counties),
+                        selected = c("Aitkin"))
+    ),
+        mainPanel(
+            plotOutput(outputId = "plot"), br(),
+            DT::dataTableOutput(outputId = "table")
+        )
+    )
+)
+
+```
+
+
+
+```{r}
+server1 <- function(input, output) {
+    filtered_data <- reactive({
+        subset(MNdata,
+               Counties %in% input$dv &
+               month >= input$monthInput[1] & month <= input$monthInput[2] & 
+          year == input$yearInput) })
+
+    output$plot <- renderPlot({
+        ggplot(filtered_data(), aes(x=dates, y=cases, color="Counties")) + theme_economist_white()+
+                geom_point(alpha=0.5, color = "blue") + theme(legend.position = "none") +
+                    ylab("Number of Cases") + xlab("Date")})
+
+    output$table <- DT::renderDataTable({
+        filtered_data()})
+        
+}
+```
+
+
+```{r, out.width = "300%"}
+app1 <- shinyApp(ui = ui1, server = server1, options = list(height = 1200))
+app1
+```
+
+
+### Your Turn 1
+
+Let's work with the same dataset as before. 
+
+1. In the UI function, have a drop-down menu asking the reader for the name of the county and range of dates in the sidebar panel.  
+
+Hint: Use `selectInput()` as before and `dateRangeInput(inputId, label, start, end)`. Look for the syntax in the Shiny cheatsheet.
+
+2. In the UI function, have a placeholder for plot inside the `plotOutput()` function in the main panel.
+
+```{r, eval = FALSE}
+ui2 <- fluidPage(
+    titlePanel(""),
+    sidebarLayout(
+        sidebarPanel(
+           ## 
+           ##
+        ),
+        mainPanel(
+           ##
+           ##
+        )
+    )
+)
+
+```
+
+
+3. In the server function, define a reactive function that reads the input parameters and filters the data according to them. In this case, they are the specific date ranges and counties.
+
+
+4. Render a `geom_point` plot that gives the a trend of case count over time. Pass the filtered data to the plotting function.
+
+```{r, eval=FALSE}
+server2 <- function(input, output) {
+    filtered_data <- reactive({
+        subset(
+          
+        )
+      }
+    )
+
+    output$plot <- renderPlot({
+       
+      }
+    )
+
+    
+}
+```
+
+
+5. Construct a `shinyApp` function that takes the user interface and server function that you just created and instructs Rstudio to host a server that hosts the Shiny web app.
+
+```{r, eval=FALSE}
+shinyApp()
+```
+
+
+
+
+
